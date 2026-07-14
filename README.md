@@ -1,152 +1,76 @@
-# CodeAlpha-helmet-detection-tracking-yolo
+# Helmet Detection + Rider Tracking
 
+Real-time detection of motorcycles/riders (COCO YOLO11) + tracking (ByteTrack)
++ helmet classification (your Roboflow model), with per-rider "Helmet" /
+"No Helmet" labels that persist across frames via track ID.
 
-A real-time Helmet Detection and Tracking system built with **Python**, **YOLOv11**, and **OpenCV**. The application detects whether motorcycle riders are wearing helmets and supports both live webcam input and prerecorded video files.
-
-This project was developed to demonstrate object detection, computer vision, and real-time video processing using a custom-trained YOLO model.
-
----
-
-## ✨ Features
-
-- 🎥 Real-time helmet detection using a webcam
-- 📹 Process prerecorded video files
-- 🪖 Detects helmet and no-helmet cases
-- 📦 Powered by a custom YOLO model
-- ⚡ Fast inference using Ultralytics YOLO
-- 🖥️ Displays detection results in real time
-
----
-
-## 🛠️ Technologies Used
-
-- Python
-- OpenCV
-- Ultralytics YOLO
-- PyTorch
-- NumPy
-
----
-## Screenshots
-
-### Helmet Detected
-<img width="673" height="416" alt="image" src="https://github.com/user-attachments/assets/aed7f72f-74f8-4182-9eb0-45c540d892d9" />
-
----
-## 📁 Project Structure
-
+## Project structure
 ```
-helmet_project/
-│
-├── models/
-│   ├── best.pt
-│   └── yolo11n.pt
-│
-├── main.py
-├── detector.py
-├── tracker.py
-├── video.py
-├── test_model.py
-├── config.py
-├── requirements.txt
-└── README.md
+config.py       - all thresholds/paths/settings, single source of truth
+utils.py        - geometry (IoU, head region) + drawing, no model code
+detector.py     - loads both models, runs per-frame inference
+tracker.py      - ByteTrack wrapper, keeps rider IDs consistent
+association.py  - pure geometry: matches helmets to riders' head regions
+video.py        - webcam/file input, optional output writer, FPS counter
+main.py         - wires everything together, the file you actually run
+test_model.py   - Stage 1 sanity check for the COCO model (already passing)
+download_helmet_model.py - one-time script to pull your helmet weights
+requirements.txt
+models/yolo11n.pt        - already downloaded, COCO-pretrained (person, motorcycle)
+models/best.pt            - YOUR helmet weights go here (not included)
 ```
 
----
-
-## 🚀 Installation
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/YOUR_USERNAME/helmet-detection.git
-cd helmet-detection
-```
-
-### 2. Install dependencies
+## Setup (run these on your own machine)
 
 ```bash
 pip install -r requirements.txt
 ```
 
----
-
-## 📥 Model
-
-This project requires a trained YOLO model (`best.pt`).
-
-Place the model inside:
-
-```
-models/best.pt
-```
-
-> **Note:** The trained model is **not included** in this repository due to its file size and licensing considerations.
-
----
-
-## ▶️ Usage
-
-### Webcam Detection
-
+### 1. Get the helmet model
 ```bash
-python main.py
+export ROBOFLOW_API_KEY="your_key_here"
+python3 download_helmet_model.py
 ```
+This tries the "Seatbelt Helmet Detection" project by default. If it has no
+hosted trained checkpoint, the script tells you exactly how to train one in
+~5 minutes with `model.train(...)`, or you can point `--workspace/--project`
+at a different Universe project that shows a "Model" badge.
 
-### Detect From Video
+Once done, confirm `models/best.pt` exists.
 
+### 2. Verify the helmet model before running the full pipeline
 ```bash
-python main.py --source path/to/video.mp4
+python3 test_model.py
 ```
+Extend this if you want (it currently checks the COCO model; add the same
+`verify_model()` + `run_sample_inference()` calls for `models/best.pt` using
+one of your own helmet photos — this is the one validation step I couldn't
+do myself, since my sandbox can't reach Roboflow).
 
-Example:
-
+### 3. Run it
 ```bash
-python main.py --source videos/test.mp4
+python3 main.py                        # webcam
+python3 main.py --source clip.mp4      # video file
+python3 main.py --source clip.mp4 --save output.mp4   # save annotated output
+python3 main.py --no-display           # headless / over SSH
 ```
+Press `q` to quit the preview window.
 
----
+## What's already verified (done in the build sandbox)
+- COCO model loads, `person`→id 0 and `motorcycle`→id 3 resolved dynamically
+- Real inference confirmed on a sample image (4 people detected, 0.86-0.94 conf)
+- ByteTrack assigns and holds consistent track IDs
+- Association logic unit-tested on synthetic boxes (correct helmet-to-rider
+  matching, correct "no helmet" fallback, correct motorcycle linking)
+- Full pipeline wiring smoke-tested end-to-end on a static image
 
-## 🧪 Verify the Model
+## What's NOT verified yet (do this first)
+- Real-world accuracy of the helmet model itself — untested by me because
+  Roboflow isn't reachable from the build sandbox. Test it on a few of your
+  own images before trusting it on live video.
 
-Before running the application, verify that the model loads correctly:
-
-```bash
-python test_model.py
-```
-
----
-
-## 📸 Example Output
-
-- Detects riders wearing helmets
-- Detects riders without helmets
-- Draws bounding boxes around detected objects
-- Displays real-time detection confidence
-
----
-
-## 📚 What I Learned
-
-During this project, I learned:
-
-- How YOLO object detection works
-- Using custom-trained models with Ultralytics
-- Real-time video processing with OpenCV
-- Loading and testing deep learning models
-- Working with computer vision datasets
-- Debugging model loading and inference issues
-
----
-
-## ⚠️ Notes
-
-- The custom model (`best.pt`) is required for helmet detection.
-- Performance depends on your hardware.
-- CPU execution is supported but may be slower than GPU acceleration.
-
----
-
-## 📄 License
-
-This project is created for educational and learning purposes.
+## Tuning
+All thresholds live in `config.py`:
+- `detection.helmet_conf_threshold` — raise if you get false positives, lower if it misses helmets
+- `association.head_region_fraction` — how much of the person box counts as "head" (default top 30%)
+- `association.helmet_iou_threshold` — how much overlap counts as a match (default 0.10, fairly lenient)
