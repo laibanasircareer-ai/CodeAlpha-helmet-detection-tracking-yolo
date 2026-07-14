@@ -19,6 +19,7 @@ This project was developed to demonstrate object detection, computer vision, and
 ##Screenshots
 
 ###Helmet Detection
+
 <img width="673" height="416" alt="Screenshot 2026-07-14 170959" src="https://github.com/user-attachments/assets/67ded8f4-225a-4547-9bdc-e0ecb585cf11" />
 
 
